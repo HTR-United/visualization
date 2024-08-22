@@ -1,2 +1,5 @@
 venv/
 htr-united.yml
+
+/.quarto/
+/_site/

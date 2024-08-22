@@ -1,0 +1,231 @@
+---
+title: "What is in HTR-United Catalog?"
+author: "Alix Chagué"
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+    toc-title: "Contents"
+    toc-location: left
+    theme: lumen
+project:
+  type: default
+  output-dir: ./computed
+jupyter: python3
+---
+
+
+# HTR-United
+
+```txt
+TODO: Paragraphs introducing HTR-United in a few words.
+```
+
+<!-- library import -->
+```{python}
+# install necessary packages
+
+import requests
+#import zipfile
+import json
+import os
+from collections import Counter
+import yaml
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from pprint import pprint
+
+#from urllib import request
+```
+
+
+<!-- some function definition -->
+```{python}
+# function to built the bar plots
+
+def make_bar_plot(counted_data, title, xlabel):
+    sorted_data = sorted(counted_data.items(), key=lambda x: x[1], reverse=True)
+    labels = [item[0] for item in sorted_data]
+    counts = [item[1] for item in sorted_data]
+
+    # Create the bar chart
+    #plt.bar(labels, counts)
+    # Create a bar plot using Seaborn
+    sns.barplot(x=labels, y=counts, hue=labels)
+
+    # Add labels and rotation for better visibility
+    plt.xlabel(xlabel)
+    plt.ylabel('Counts')
+    plt.xticks(rotation=45, ha='right')
+
+    # Add a title
+    plt.title(title)
+
+    # Display the chart
+    plt.tight_layout()  # Ensures labels are not cut off
+    plt.show()
+
+# function to change the lists are shown
+def pretty_list_of_projects(most_common_projects):
+    pretty_list = ""
+    for common_project in most_common_projects:
+        pretty_list += f"\t{common_project[0].strip()} - {common_project[1]} datasets.\n"
+    return pretty_list[:-1]
+```
+
+
+
+## Downloading the catlaog
+
+<!-- library import -->
+
+```{python}
+# fetch latest version of the catalog
+
+url_latest = "https://api.github.com/repos/htr-united/htr-united/releases/latest"
+r = requests.get(url_latest)
+if r.status_code == 200:
+    github_url = r.json().get("html_url", "")
+
+    htr_united_version = github_url.split("/")[-1]
+
+    if github_url:
+        # let's build the url to the latest yaml file
+        github_url = github_url.replace("/releases/tag/", "/").replace("/github.com/", "/raw.githubusercontent.com/") + "/htr-united.yml"
+
+        r_yml = requests.get(github_url)
+        if r_yml.status_code == 200:
+            # now let's download the yaml file
+            with open("htr-united.yml", "w", encoding="utf8") as fh:
+                fh.write(r_yml.text)  
+            print("We are currently computing the content of HTR-United's catalog", htr_united_version)
+
+        else:
+            print("Couldn't connect to", github_url, "got status code", r_yml.status_code)
+else:
+    print("Couldn't connect to", url_latest, "got status code", r.status_code)
+
+# Load the YAML file as a JSON file
+yaml_file_path = "htr-united.yml"
+json_file_path = "htr-united.json"
+
+if os.path.exists(yaml_file_path):
+    with open(yaml_file_path, "r") as yaml_file:
+        data = yaml.safe_load(yaml_file)
+
+# at this point we could remove yaml_file_path but I keep it for history.
+```
+
+## Language coverage
+
+```{python}
+languages = []
+for entry in data:
+    if entry.get("language"):
+        languages = languages + entry.get("language")
+
+counted_lgges = Counter(languages)
+
+print(f"There are {len(counted_lgges)} languages represented in the catalog.")
+print(f"The top 5 languages represented are:")
+for cl in counted_lgges.most_common(5):
+    print(f"{cl[0]} = {cl[1]} times")
+
+make_bar_plot(counted_lgges, title='Language Distribution', xlabel="Languages")
+```
+
+## Script coverage
+
+```{python}
+scripts_dict = []
+for entry in data:
+    if entry.get("script"):
+        scripts_dict = scripts_dict + entry.get("script")
+
+scripts = []
+for sd in scripts_dict:
+    scripts.append(sd["iso"])
+
+counted_scripts = Counter(scripts)
+
+print(f"There are {len(counted_scripts)} scripts represented in the catalog.")
+print(f"The top 5 scripts represented are:")
+for cs in counted_scripts.most_common(5):
+    print(f"{cs[0]} = {cs[1]} times")
+
+make_bar_plot(counted_scripts, title='Script Distribution', xlabel="Scripts")
+```
+
+## Script type coverage
+
+```{python}
+script_types = [entry.get("script-type") for entry in data if entry.get("script-type")]
+counted_script_types = Counter(script_types)
+
+pprint(counted_script_types)
+make_bar_plot(counted_script_types, title='Script type Distribution', xlabel="Script Type")
+```
+
+## Software variety
+
+```{python}
+softwares = [entry.get("production-software") for entry in data if entry.get("production-software")]
+counted_softwares = Counter(softwares)
+
+pprint(counted_softwares)
+make_bar_plot(counted_softwares, title='Software Distribution', xlabel="Software")
+```
+
+
+## Project diversity
+
+```{python}
+# nb of datasets in the catalog
+nb_of_datasets = len(set([entry.get("title") for entry in data if entry.get("title")]))
+
+# nb of projects contributing to the catalog (and signaled)
+projects = [entry.get("project-name", "unknown") for entry in data if entry.get("project-name")]
+
+nb_of_projects = len(Counter(projects))
+biggest_project_contributers = Counter(projects).most_common(5)
+nb_of_datasets_from_projects = len([entry.get("title") for entry in data if entry.get("project-name")])
+
+# time span
+times = [entry.get("time") for entry in data if entry.get("time")]
+earliest = min([int(time['notBefore']) for time in times])
+latest = max([int(time['notAfter']) for time in times])
+
+# let's see the result
+print(
+    f"There are {nb_of_datasets} datasets listed in the catalog",
+    f"At least {nb_of_projects} identified projects contributed a total of {nb_of_datasets_from_projects} datasets listed in the catalog",
+    f"The projects which contributed the most to the catalog are:",
+    pretty_list_of_projects(biggest_project_contributers),
+    f"The catalog covers a period going from the year {earliest} to the year {latest}",
+    sep="\n"
+)
+```
+
+## Volumetry
+
+```{python}
+metrics = {
+    'images': 0,
+    'characters': 0,
+    'lines': 0,
+    'files': 0,
+    'pages': 0,
+    'regions': 0}
+
+#{'images', 'characters', 'lines', 'files', 'pages', 'regions'}
+
+for entry in data:
+    for vol in entry.get("volume", []):
+        metrics[vol["metric"]] += vol["count"]
+
+pprint(metrics)
+```
+
